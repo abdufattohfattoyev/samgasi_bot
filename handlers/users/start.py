@@ -86,27 +86,7 @@ async def ensure_subscription(message: types.Message):
 
 
 # Foydalanuvchini bazaga qo'shish
-@dp.message_handler(CommandStart())
-async def bot_start(message: types.Message):
-    user_info = {
-        "user_id": message.from_user.id,
-        "full_name": message.from_user.full_name,
-        "username": message.from_user.username,
-    }
-    existing_user = user_db.get_user_by_id(user_info['user_id'])
-    if existing_user:
-        print(f"Foydalanuvchi {message.from_user.full_name} allaqachon mavjud.")
-    else:
-        user_db.add_user(user_info['user_id'], user_info['username'])
-        print(f"Foydalanuvchi {message.from_user.full_name} ro'yxatga olindi.")
 
-    # Obuna bo'lishini tekshirish
-    subscription_status = await ensure_subscription(message)
-
-    if not subscription_status[0]:
-        return
-
-    await message.answer("Salom! Iltimos, ID ni kiriting.")
 
 
 @dp.callback_query_handler(lambda c: c.data == "check_subscription")
@@ -169,33 +149,64 @@ class ExcelDataHandler:
         try:
             self.excel_data = pd.read_excel(file_path, engine='openpyxl')
 
-            # 'ID' ustuni mavjudligini tekshirish
+            # 'ID' ustunini indeks sifatida belgilash
             if 'ID' not in self.excel_data.columns:
                 return None, "'ID' ustuni mavjud emas."
 
-            # 'ID' ustunini string ko'rinishida o'qish va tozalash
             self.excel_data['ID'] = self.excel_data['ID'].astype(str).str.strip()
+            self.excel_data.set_index('ID', inplace=True)  # ID ni indeks sifatida o'rnatish
             return True, "Fayl muvaffaqiyatli o'qildi."
         except Exception as e:
             return None, str(e)
 
-    def save_excel(self, file_path):
-        try:
-            if self.excel_data is not None:
-                self.excel_data.to_excel(file_path, index=False)
-                return True
-            else:
-                return False
-        except Exception as e:
-            return False, str(e)
+    def get_user_data_by_id(self, user_id):
+        # Tezkor qidirish uchun ID bo'yicha ma'lumotni indeks orqali olish
+        user_id = str(user_id).strip()
+        return self.excel_data.loc[user_id] if user_id in self.excel_data.index else None
 
 
 excel_data_handler = ExcelDataHandler()  # Instantiation fixed
 
-# ID bo‘yicha ma’lumot qidirish
+@dp.message_handler(CommandStart())
+async def bot_start(message: types.Message):
+    user_info = {
+        "user_id": message.from_user.id,
+        "full_name": message.from_user.full_name,
+        "username": message.from_user.username,
+    }
+    existing_user = user_db.get_user_by_id(user_info['user_id'])
+    if existing_user:
+        print(f"Foydalanuvchi {message.from_user.full_name} allaqachon mavjud.")
+    else:
+        user_db.add_user(user_info['user_id'], user_info['username'])
+        print(f"Foydalanuvchi {message.from_user.full_name} ro'yxatga olindi.")
+
+    # Obuna bo'lishini tekshirish
+    subscription_status = await ensure_subscription(message)
+
+    if not subscription_status[0]:
+        return
+
+    await message.answer(
+        "<b>❗ Xatolik!</b>\n\n"
+        "ID faqat 6 ta raqamdan iborat bo'lishi kerak. Bosh joy yoki harf qo'shish mumkin emas.\n"
+        "<b>NAMUNA:</b> <code>'123456'</code>",
+        parse_mode="HTML"
+    )
+
+
 @dp.message_handler(lambda message: message.text.isdigit())
 async def handle_id_input(message: types.Message):
-    user_id = str(message.text).strip()
+    # Agar foydalanuvchi kanalga obuna bo'lmagan bo'lsa
+    if message.from_user.id not in user_subscription_status or not user_subscription_status[message.from_user.id]:
+        await message.answer(
+            "❗ **Diqqat!**\n\n"
+            "Siz hali ham kanalga obuna bo'lmagansiz. Iltimos, kanalga obuna bo'ling va keyin ID yuboring.",
+            parse_mode="Markdown"
+        )
+        return
+
+    user_id = message.text
 
     # Excel fayli yuklanganligini tekshirish
     if excel_data_handler.excel_data is None:
@@ -209,11 +220,9 @@ async def handle_id_input(message: types.Message):
 
     try:
         # ID bo‘yicha ma’lumot qidirish
-        user_data = excel_data_handler.excel_data[
-            excel_data_handler.excel_data['ID'].astype(str).str.strip() == user_id
-        ]
+        user_data = excel_data_handler.get_user_data_by_id(user_id)
 
-        if user_data.empty:
+        if user_data is None:
             await message.answer(f"❌ ID {user_id} bo‘yicha ma'lumot topilmadi.")
         else:
             # Ma'lumotni rasm shaklida yuborish
@@ -223,19 +232,19 @@ async def handle_id_input(message: types.Message):
         await message.answer(f"❗ Xatolik yuz berdi: {str(e)}")
 
 
-# Ma'lumotni rasm shaklida jo'natish
+
+
+
 async def send_user_data_as_image(message: types.Message, user_id: str):
     # Foydalanuvchi ma'lumotlarini olish
-    user_data = excel_data_handler.excel_data[
-        excel_data_handler.excel_data['ID'].astype(str).str.strip() == user_id
-        ]
+    user_data = excel_data_handler.get_user_data_by_id(user_id)
 
     # Ma'lumotlar mavjudligini tekshirish
-    if user_data.empty:
+    if user_data is None:
         await message.answer("🛑 Kiritilgan ID bo'yicha ma'lumotlar topilmadi.")
         return
 
-    headers = user_data.columns.to_list()
+    headers = user_data.index.to_list()
 
     # Raqqamlarni butun son sifatida formatlash
     def format_value(val):
@@ -243,7 +252,7 @@ async def send_user_data_as_image(message: types.Message, user_id: str):
             return int(val)  # Butun sonni qaytarish
         return val
 
-    values = [list(map(format_value, row)) for row in user_data.values.tolist()]
+    values = [list(map(format_value, user_data.tolist()))]
 
     # Grafikni yaratish
     fig, ax = plt.subplots(figsize=(10, len(user_data) * 0.6 + 1))  # figsize ni kichraytirish
@@ -267,7 +276,7 @@ async def send_user_data_as_image(message: types.Message, user_id: str):
             cell.set_facecolor('lightgrey')
 
     # Rasmni saqlash va yuborish
-    img_stream = io.BytesIO()
+    img_stream = BytesIO()
     plt.savefig(img_stream, format='png', bbox_inches='tight', dpi=300)  # dpi ni kamaytirish
     img_stream.seek(0)
     plt.close()
@@ -276,10 +285,8 @@ async def send_user_data_as_image(message: types.Message, user_id: str):
     await message.answer_photo(photo, caption=f"📊 <b>ID {user_id} bo‘yicha ma'lumot</b>", parse_mode='HTML')
 
 
-@dp.message_handler(lambda message: message.text.isdigit())
-async def handle_id_input(message: types.Message):
-    user_id = message.text
-    await send_user_data_as_image(message, user_id)
+from io import BytesIO
+
 
 # Admin panel
 @dp.message_handler(commands=['admin_panel'])
