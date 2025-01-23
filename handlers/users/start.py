@@ -23,6 +23,7 @@ REQUIRED_CHANNELS = ["@yosh_dasturcii"]
 
 # Foydalanuvchilarning obuna bo'lganligini tekshirish uchun flag
 user_subscription_status = {}
+#salom
 
 async def check_subscription(user_id):
     """
