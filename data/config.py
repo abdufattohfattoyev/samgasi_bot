@@ -7,3 +7,5 @@ env.read_env()
 BOT_TOKEN = env.str("BOT_TOKEN")  # Bot token
 ADMINS = env.list("ADMINS", subcast=int)  # Adminlar ro'yxati (int ga aylantiramiz)
 IP = env.str("ip")
+
+CHANNEL_ID = "@YOSH_DASTURCII"  # masalan: @obuna_kanalim

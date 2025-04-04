@@ -133,3 +133,4 @@ dmypy.json
 
 *.db
 data/*.db
+*~
