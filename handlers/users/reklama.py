@@ -152,8 +152,8 @@ async def check_admin_permission(telegram_id: int):
     admin = user_db.check_if_admin(user_id=user_id)
     return admin
 
-@dp.message_handler(Command("reklama"), state="*")  # Bu yerda barcha holatlar uchun ishlaydi
-@dp.message_handler(text="📣 Reklama", state="*")  # Agar tugma bosilgan bo'lsa ham ishlaydi
+@dp.message_handler(commands=['reklama'], state="*")
+@dp.message_handler(text="📣 Reklama", state="*")
 async def reklama_handler(message: types.Message):
     telegram_id = message.from_user.id
     if await check_admin_permission(telegram_id) or await check_super_admin_permission(telegram_id):

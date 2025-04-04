@@ -9,7 +9,11 @@ from aiogram.dispatcher.filters.builtin import CommandStart
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode, InputFile
 from aiogram.types import ChatMemberStatus, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.exceptions import ChatAdminRequired
+# Qo'shimcha import qo'shing:
+from aiogram.dispatcher import FSMContext
 
+from handlers.users.reklama import check_admin_permission, check_super_admin_permission, ReklamaTuriState, \
+    get_ad_type_keyboard
 from loader import dp, bot, user_db
 from data.config import ADMINS
 
@@ -190,6 +194,7 @@ async def send_user_data_as_image(message: types.Message, user_id: str):
         await message.answer_photo(photo, caption=caption, parse_mode='HTML')
 
 # Admin panel
+# Admin panelini yangilang
 @dp.message_handler(commands=['admin_panel'])
 async def admin_panel(message: types.Message):
     if message.from_user.id not in ADMINS:
@@ -200,8 +205,23 @@ async def admin_panel(message: types.Message):
     keyboard.add(
         KeyboardButton('📤 Fayl yuklash'),
         KeyboardButton('🗑️ Fayl o\'chirish'),
+        KeyboardButton('👥 Foydalanuvchilar soni')  # Yangi tugma
     )
     await message.answer("👨‍💻 Admin paneliga xush kelibsiz! Quyidagi amallarni tanlang:", reply_markup=keyboard)
+
+
+@dp.message_handler(lambda message: message.text == '👥 Foydalanuvchilar soni')
+async def show_users_count(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        await message.answer("❌ Siz admin emassiz!")
+        return
+
+    try:
+        users_count = user_db.count_users()
+        await message.answer(f"👥 Botdagi jami foydalanuvchilar soni: {users_count}")
+    except Exception as e:
+        logging.error(f"Foydalanuvchilar sonini olishda xato: {e}")
+        await message.answer("❌ Foydalanuvchilar sonini olishda xatolik yuz berdi")
 
 # Fayl yuklash
 @dp.message_handler(lambda message: message.text == '📤 Fayl yuklash')
@@ -249,12 +269,25 @@ async def delete_file(message: types.Message):
     else:
         await message.answer("❌ O'chirish uchun fayl topilmadi!")
 
-
+@dp.message_handler(commands=['reklama'], state="*")
+@dp.message_handler(text="📣 Reklama", state="*")
+async def reklama_handler(message: types.Message):
+    telegram_id = message.from_user.id
+    if await check_admin_permission(telegram_id) or await check_super_admin_permission(telegram_id):
+        await ReklamaTuriState.tur.set()  # Reklama turini tanlash holatiga o'tish
+        await bot.send_message(chat_id=message.chat.id, text="Reklama turini tanlang:", reply_markup=get_ad_type_keyboard())
+    else:
+        await message.reply("Sizda ushbu amalni bajarish uchun ruxsat yo'q.")
 
 # Har qanday noto'g'ri xabar uchun
 @dp.message_handler()
 async def wrong_input(message: types.Message):
+    # /reklama komandasini o'tkazib yuborish
+    if message.text.startswith('/reklama'):
+        return await reklama_handler(message)
+
     subscription_status, markup, unsubscribed_channels = await ensure_subscription(message)
     if not subscription_status:
         return
-    await message.answer("❗ Iltimos, to'g'ri ID kiriting yoki /start buyrug‘ini bosing!")
+
+    await message.answer("❗ Iltimos, to'g'ri ID kiriting yoki /start buyrug'ini bosing!")
