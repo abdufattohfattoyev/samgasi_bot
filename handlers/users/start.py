@@ -55,7 +55,7 @@ async def ensure_subscription(message: types.Message):
         return True, markup, unsubscribed_channels
 
     for idx, channel in unsubscribed_channels:
-        button_text = f"❌ Kanal {idx} - {channel}"
+        button_text = f"❌ Kanal {idx}"
         button_url = f"https://t.me/{channel.lstrip('@')}"
         markup.add(InlineKeyboardButton(button_text, url=button_url))
 
@@ -106,7 +106,7 @@ async def check_subscription_callback(query: types.CallbackQuery):
     else:
         await query.message.delete()
         for idx, channel in unsubscribed_channels:
-            button_text = f"❌ Kanal {idx} - {channel}"
+            button_text = f"❌ Kanal {idx}"
             button_url = f"https://t.me/{channel.lstrip('@')}"
             markup.add(InlineKeyboardButton(button_text, url=button_url))
         markup.add(InlineKeyboardButton("✅ Obunani tekshirish", callback_data="check_subscription"))
